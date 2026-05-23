@@ -35,6 +35,11 @@ NO_WHITELIST_FILE=''
 NO_SYSLOG_LOGGING=''
 USE_LOGGER=''
 FAIL_ON_MODULE_LOAD=0
+# v1.3 OPT-02/03/04 flag defaults
+DRY_RUN=0
+QUIET=0
+VERBOSE=0
+OUTPUT_FORMAT=''
 
 # Path checked for a site-local whitelist when --whitelist-file is not given.
 # When the file exists, it is loaded automatically with the same strict
@@ -209,6 +214,29 @@ while [ $# -gt 0 ]; do
             FAIL_ON_MODULE_LOAD=1
             shift
             ;;
+        --dry-run)
+            # shellcheck disable=SC2034  # DRY_RUN consumed by Wave 2 (05-02)
+            DRY_RUN=1
+            shift
+            ;;
+        --quiet)
+            QUIET=1
+            shift
+            ;;
+        --verbose)
+            VERBOSE=1
+            shift
+            ;;
+        --output-format)
+            [ $# -ge 2 ] || { printf 'modulejail: error: --output-format requires json or logfmt argument\n' >&2; exit $EX_USAGE; }
+            OUTPUT_FORMAT="$2"
+            shift 2
+            ;;
+        --output-format=*)
+            OUTPUT_FORMAT="${1#*=}"
+            [ -n "$OUTPUT_FORMAT" ] || { printf 'modulejail: error: --output-format= requires non-empty argument (expected json or logfmt)\n' >&2; exit $EX_USAGE; }
+            shift
+            ;;
         -h|--help)
             usage
             exit $EX_OK
@@ -236,8 +264,8 @@ done
 
 # --- Validate profile ---
 case "$profile" in
-    minimal|conservative|desktop) ;;
-    *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop)\n' "$profile" >&2; exit $EX_USAGE ;;
+    minimal|conservative|desktop|none) ;;
+    *) printf 'modulejail: error: unknown profile: %s (expected minimal, conservative, desktop, none)\n' "$profile" >&2; exit $EX_USAGE ;;
 esac
 
 # --- Reject contradictory whitelist-file flags ---
@@ -246,6 +274,20 @@ esac
 if [ -n "$WHITELIST_FILE" ] && [ -n "$NO_WHITELIST_FILE" ]; then
     printf 'modulejail: error: --whitelist-file PATH and --no-whitelist-file are mutually exclusive\n' >&2
     exit $EX_USAGE
+fi
+
+# --- Reject mutually exclusive verbosity flags ---
+if [ "$QUIET" -eq 1 ] && [ "$VERBOSE" -eq 1 ]; then
+    printf 'modulejail: error: --quiet and --verbose are mutually exclusive\n' >&2
+    exit $EX_USAGE
+fi
+
+# --- Validate --output-format value ---
+if [ -n "$OUTPUT_FORMAT" ]; then
+    case "$OUTPUT_FORMAT" in
+        json|logfmt) ;;
+        *) printf 'modulejail: error: unknown --output-format: %s (expected json or logfmt)\n' "$OUTPUT_FORMAT" >&2; exit $EX_USAGE ;;
+    esac
 fi
 
 # --- Default whitelist file auto-detection ---
