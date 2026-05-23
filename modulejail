@@ -676,6 +676,41 @@ emit_install_line() {
     fi
 }
 
+# Machine-readable one-line summary (--output-format json|logfmt, OPT-04).
+# Called by the three-way stdout branch when --output-format is set;
+# bypasses --quiet per D-Phase5-09. Schema v1 locked (D-Phase5-10):
+# 11 fields, additive-only in future versions.
+emit_machine_summary() {
+    _fmt=$1
+    _modules_loaded=$(wc -l < "$workdir/loaded.txt" | awk '{print $1}')
+    if [ -n "$WHITELIST_FILE" ]; then
+        _wl_json="\"$WHITELIST_FILE\""
+        _wl_lf="$WHITELIST_FILE"
+    else
+        _wl_json='null'
+        _wl_lf=''
+    fi
+    if [ "$DRY_RUN" -eq 1 ]; then
+        _dry='true'
+    else
+        _dry='false'
+    fi
+    case "$_fmt" in
+        json)
+            printf '{"schema_version":1,"tool":{"name":"modulejail","version":"%s"},"kernel_version":"%s","profile":"%s","dry_run":%s,"whitelist_file":%s,"modules_available":%d,"modules_loaded":%d,"modules_blacklisted":%d,"fingerprint":"%s","output_path":"%s"}\n' \
+                "$VERSION" "$_kver" "$profile" "$_dry" "$_wl_json" \
+                "$universe_count" "$_modules_loaded" "$blacklist_count" \
+                "$fingerprint" "$output"
+            ;;
+        logfmt)
+            printf 'schema_version=1 tool_name=modulejail tool_version=%s kernel_version=%s profile=%s dry_run=%s whitelist_file=%s modules_available=%d modules_loaded=%d modules_blacklisted=%d fingerprint=%s output_path=%s\n' \
+                "$VERSION" "$_kver" "$profile" "$_dry" "$_wl_lf" \
+                "$universe_count" "$_modules_loaded" "$blacklist_count" \
+                "$fingerprint" "$output"
+            ;;
+    esac
+}
+
 list_baseline > "$workdir/baseline.txt"
 # parse_whitelist_file may exit non-zero (EX_NOINPUT / EX_NOPERM /
 # EX_DATAERR / EX_OSERR). POSIX /bin/sh has no `pipefail`, so the helper
@@ -849,14 +884,13 @@ else
     mv -- "$tmp" "$output"
 fi
 
-# Single-line success summary on stdout.
-# Parseable by `awk -F'[ ()=:>-]+'` for fleet log aggregators;
-# quiet enough not to spam Ansible/Puppet output. Under --dry-run
-# the line is prefixed with 'DRY-RUN: would ' (two extra lexical
-# tokens; fleet aggregators see one extra field at column 2).
-# Under --quiet this entire block is silenced; exit code is the only signal.
-# Plan 05-05 adds the --output-format three-way branch on top of this if/else.
-if [ "$QUIET" -eq 0 ]; then
+# Stdout summary: three-way branch (D-Phase5-09, D-Phase5-12).
+# D-Phase5-12: --output-format REPLACES the human-readable summary.
+# D-Phase5-09: JSON/logfmt IS the parser surface; --quiet does NOT silence it.
+if [ -n "$OUTPUT_FORMAT" ]; then
+    # Machine-readable: emits regardless of --quiet (D-Phase5-09).
+    emit_machine_summary "$OUTPUT_FORMAT"
+elif [ "$QUIET" -eq 0 ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
         printf 'modulejail: DRY-RUN: would blacklist %d of %d modules (profile=%s) -> %s\n' \
             "$blacklist_count" "$universe_count" "$profile" "$output"
