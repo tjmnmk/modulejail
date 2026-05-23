@@ -35,6 +35,11 @@ NO_WHITELIST_FILE=''
 NO_SYSLOG_LOGGING=''
 USE_LOGGER=''
 FAIL_ON_MODULE_LOAD=0
+# v1.3 OPT-02/03/04 flag defaults
+DRY_RUN=0
+QUIET=0
+VERBOSE=0
+OUTPUT_FORMAT=''
 
 # Path checked for a site-local whitelist when --whitelist-file is not given.
 # When the file exists, it is loaded automatically with the same strict
