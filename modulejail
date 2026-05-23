@@ -714,7 +714,7 @@ if [ "$blacklist_count" -eq 0 ]; then
     exit $EX_SOFTWARE
 fi
 
-if [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
+if [ "$profile" != "none" ] && [ "$((blacklist_count * 100))" -gt "$((universe_count * 99))" ]; then
     printf 'modulejail: error: computed blacklist covers %d of %d modules (>99%% of universe).\n' \
         "$blacklist_count" "$universe_count" >&2
     printf 'modulejail: error: This usually means /proc/modules was unreadable or the baseline list is wrong.\n' >&2
