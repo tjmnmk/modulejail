@@ -1,0 +1,68 @@
+#!/bin/sh
+# pre-push hook for the modulejail repo: when a v* tag is pushed to origin,
+# automatically publish the corresponding PKGBUILD bump to AUR.
+#
+# Activation (one-time, per checkout):
+#     git config core.hooksPath scripts/hooks
+#
+# Mechanism:
+#   git has no post-push hook, so this pre-push hook detects the v* tag
+#   push, returns 0 immediately so the GitHub push proceeds, and
+#   backgrounds a polling process. That process waits for the release
+#   tarball to appear on GitHub (up to 120s) and then runs
+#   scripts/publish-aur.sh.
+#
+#   If the GitHub push fails after the hook returns (rare: network
+#   blip, branch-protection rejection), the tarball never materialises,
+#   the polling process times out, and AUR is not synced. Re-push the
+#   tag and the hook fires again - no manual recovery needed; the
+#   publish script is idempotent.
+#
+# Logs:
+#   Tail /tmp/modulejail-aur-publish.log to watch progress in real time.
+
+set -eu
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+TRIGGER_TAG=""
+
+# stdin format: <local-ref> <local-sha> <remote-ref> <remote-sha>, one per ref.
+while read -r local_ref _local_sha _remote_ref _remote_sha; do
+    case $local_ref in
+        refs/tags/v*)
+            TRIGGER_TAG=${local_ref#refs/tags/}
+            ;;
+    esac
+done
+
+if [ -z "$TRIGGER_TAG" ]; then
+    exit 0
+fi
+
+LOG=/tmp/modulejail-aur-publish.log
+URL="https://github.com/jnuyens/modulejail/archive/refs/tags/${TRIGGER_TAG}.tar.gz"
+
+nohup sh -c "
+    echo
+    echo \"[\$(date)] pre-push hook scheduled AUR publish for ${TRIGGER_TAG}\"
+    echo \"[\$(date)] waiting for GitHub tarball at ${URL}\"
+    for i in \$(seq 1 60); do
+        sleep 2
+        if curl -fsI '${URL}' >/dev/null 2>&1; then
+            echo \"[\$(date)] tarball available after \$((i*2))s; running publish-aur.sh\"
+            cd '${REPO_ROOT}'
+            if ./scripts/publish-aur.sh; then
+                echo \"[\$(date)] AUR publish: success\"
+            else
+                echo \"[\$(date)] AUR publish: FAILED (exit \$?)\"
+            fi
+            exit 0
+        fi
+    done
+    echo \"[\$(date)] tarball never appeared after 120s; AUR not synced\"
+    echo \"[\$(date)] re-push the tag to retry (publish-aur.sh is idempotent)\"
+" </dev/null >>"$LOG" 2>&1 &
+
+echo "pre-push hook: scheduled AUR sync for ${TRIGGER_TAG} in background." >&2
+echo "  Tail $LOG to watch progress; the script is idempotent if re-run." >&2
+exit 0
