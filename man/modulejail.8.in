@@ -393,6 +393,34 @@ output_path       string   (target path; under --dry-run, the would-be path)
 schema_version=1 tool_name=modulejail tool_version=1.3.0 kernel_version=6.8.0-31-generic profile=conservative dry_run=false whitelist_file=/etc/modulejail/whitelist.conf modules_available=4912 modules_loaded=47 modules_blacklisted=4810 fingerprint=a3f5b9c2e1d4... output_path=/etc/modprobe.d/modulejail-blacklist.conf
 .EE
 .RE
+.SS "Fleet automation idiom"
+Without
+.BR \-\-quiet ,
+.B modulejail
+may emit human-readable
+.B info:
+lines to stderr (for example, the default-whitelist notice or the
+.B \-p\ none
+sanity-guard notice) alongside the machine-readable stdout record.
+Fleet automation that captures stderr into a unified log
+.RB ( 2>&1 )
+will receive both the structured output and these human-readable lines.
+To suppress all non-error stderr output while keeping the structured
+stdout record intact, combine
+.B \-\-output\-format
+with
+.BR \-\-quiet :
+.PP
+.RS 4
+.EX
+modulejail \-\-output\-format json \-\-quiet | jq .
+modulejail \-\-output\-format logfmt \-\-quiet
+.EE
+.RE
+.PP
+.B \-\-quiet
+never suppresses the machine-readable stdout record, only the
+human-targeted stderr diagnostics.
 .SS "Fingerprint format"
 The
 .B fingerprint
