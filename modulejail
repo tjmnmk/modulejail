@@ -420,6 +420,7 @@ cleanup() {
     # idiom returned 1 whenever $tmp was still empty (every error path
     # before the render block), masking explicit `exit $EX_*` codes.
     # Surfaced by the new whitelist-file rejection paths (Plan 03-01).
+    # shellcheck disable=SC2317  # invoked via trap string, not direct call
     return 0
 }
 trap cleanup EXIT INT HUP TERM

@@ -70,6 +70,7 @@ assert_eq 0 "$bad" syntactic-validity
 
 printf '== [%s] (9) no per-distro branches in modulejail ==\n' "$DISTRO"
 # Assert grep finds zero per-distro branch patterns (exits 1 = no match = pass).
+# shellcheck disable=SC2015  # intentional: trailing `|| true` suppresses grep's no-match exit; the printf-then-exit-1 path is the only failure surface
 grep -qE '/etc/os-release|/etc/lsb-release|/etc/redhat-release|/etc/debian_version|ID_LIKE|ID=ubuntu|ID=debian|ID=rhel|ID=fedora|ID=arch|ID=alpine|ID=opensuse' /usr/local/bin/modulejail && { printf 'FAIL [%s]: per-distro branch found in modulejail\n' "$DISTRO" >&2; exit 1; } || true
 
 printf '== [%s] (10) Header shape (version-agnostic) ==\n' "$DISTRO"
