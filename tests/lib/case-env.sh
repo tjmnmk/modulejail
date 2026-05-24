@@ -1,19 +1,35 @@
 #!/bin/sh
-# Shared setup for host-local test cases under tests/cases/.
-# Sourced (NOT executed) by each case; exports a hermetic synthetic
-# kernel-module tree and a fake /proc/modules under $CASE_TMP. Each case
-# is responsible for installing an EXIT trap that removes $CASE_TMP.
+# Shared boilerplate for host-local test cases under tests/cases/.
+# Sourced (NOT executed) by each case; sets REPO_ROOT / MODULEJAIL_BIN /
+# CASE_TMP, installs the centralized EXIT trap, and exports the universal
+# hermetic-test env vars (MODULEJAIL_NO_UPDATE_CHECK,
+# MODULEJAIL_DEFAULT_WHITELIST_FILE). Also provides the case_pass /
+# case_fail helpers.
 #
 # Inputs (set by the case BEFORE sourcing this file):
 #   CASE_NAME - short label printed in pass/fail lines.
 #
-# Outputs (exported for the modulejail invocation):
-#   MODULEJAIL_MODULES_ROOT - synthetic /lib/modules root
-#   MODULEJAIL_KVER         - pinned synthetic kernel version
-#   MODULEJAIL_PROC_MODULES - path to fake /proc/modules
-#   MODULEJAIL_NO_UPDATE_CHECK=1 - suppress the post-run update check
-#                                  so cases are network-hermetic.
-#   CASE_TMP                - tempdir root (case must rm -rf it on exit)
+# Outputs (set or exported for the modulejail invocation):
+#   REPO_ROOT                       - repo root (cd'd from this script)
+#   MODULEJAIL_BIN                  - absolute path to the modulejail script
+#   CASE_TMP                        - tempdir root (auto-cleaned on EXIT)
+#   MODULEJAIL_NO_UPDATE_CHECK=1    - suppress the post-run update check
+#                                     so cases are network-hermetic.
+#   MODULEJAIL_DEFAULT_WHITELIST_FILE - absent-by-default whitelist path
+#                                     under CASE_TMP, isolating cases from
+#                                     any /etc/modulejail/whitelist.conf
+#                                     that may exist on a developer's
+#                                     machine or CI runner.
+#
+# Synthetic kernel-module tree builder (the small representative
+# universe + fake /proc/modules) MIGRATED to tests/lib/case-tree.sh per
+# D-Phase6-14. Cases that want it must source case-tree.sh AFTER this
+# file. v1.1.4-regression.sh builds its own 6474-entry universe inline
+# and does NOT source case-tree.sh.
+#
+# Source order (mandatory if case-tree.sh is wanted):
+#   . "$REPO_ROOT/tests/lib/case-env.sh"   # sets CASE_TMP first
+#   . "$REPO_ROOT/tests/lib/case-tree.sh"  # consumes CASE_TMP
 #
 # This file is intentionally minimal: it does NOT define assertion
 # helpers (those live in tests/lib/assert.sh) and it does NOT chdir.
@@ -33,56 +49,20 @@ export MODULEJAIL_BIN
 CASE_TMP=$(mktemp -d "${TMPDIR:-/tmp}/modulejail-case.XXXXXX")
 export CASE_TMP
 
-CASE_KVER=6.99.0-case
-CASE_MODULES_ROOT=$CASE_TMP/lib/modules
-CASE_TREE=$CASE_MODULES_ROOT/$CASE_KVER/kernel
-mkdir -p "$CASE_TREE/fs" "$CASE_TREE/net" "$CASE_TREE/drivers" "$CASE_TREE/crypto"
+# Centralized EXIT trap (D-Phase6-15). The 29 existing host-local cases
+# that install their own identical trap keep them as-is - POSIX trap is
+# idempotent for identical handlers, so the duplicate is a no-op at
+# runtime. v1.1.4-regression.sh (refactored in Plan 06-01) relies on
+# this trap exclusively and does NOT install its own.
+trap 'rm -rf "$CASE_TMP"' EXIT INT HUP TERM
 
-# Representative universe: a handful across the four .ko* suffix variants
-# plus padding to keep the >99% sanity guard from tripping on the small
-# keep-set (loaded ~7 entries + baseline ~55 + whitelist additions).
-touch \
-    "$CASE_TREE/fs/ext4.ko.zst" \
-    "$CASE_TREE/fs/btrfs.ko.zst" \
-    "$CASE_TREE/fs/xfs.ko.xz" \
-    "$CASE_TREE/fs/vfat.ko.gz" \
-    "$CASE_TREE/net/sctp.ko.zst" \
-    "$CASE_TREE/net/netfilter.ko.zst" \
-    "$CASE_TREE/net/nft_compat.ko" \
-    "$CASE_TREE/drivers/e1000e.ko" \
-    "$CASE_TREE/drivers/virtio_net.ko.gz" \
-    "$CASE_TREE/drivers/vfio_pci.ko.zst" \
-    "$CASE_TREE/drivers/usb_storage.ko.zst" \
-    "$CASE_TREE/crypto/aes_generic.ko.zst" \
-    "$CASE_TREE/crypto/sha256_generic.ko"
-
-i=1
-while [ "$i" -le 50 ]; do
-    touch "$CASE_TREE/drivers/dummy_$i.ko.zst"
-    i=$((i + 1))
-done
-
-CASE_PROC=$CASE_TMP/proc-modules
-{
-    printf '%s 16384 1 - Live 0x0000000000000000\n' ext4
-    printf '%s 16384 1 - Live 0x0000000000000000\n' btrfs
-    printf '%s 16384 1 - Live 0x0000000000000000\n' xfs
-    printf '%s 16384 1 - Live 0x0000000000000000\n' e1000e
-    printf '%s 16384 1 - Live 0x0000000000000000\n' virtio_net
-    printf '%s 16384 1 - Live 0x0000000000000000\n' usb_storage
-    printf '%s 16384 1 - Live 0x0000000000000000\n' aes_generic
-} > "$CASE_PROC"
-
-MODULEJAIL_MODULES_ROOT=$CASE_MODULES_ROOT
-MODULEJAIL_KVER=$CASE_KVER
-MODULEJAIL_PROC_MODULES=$CASE_PROC
 MODULEJAIL_NO_UPDATE_CHECK=1
 # Point the default-whitelist-file detector at a path inside $CASE_TMP that
 # does not exist. This isolates cases from any /etc/modulejail/whitelist.conf
 # that may exist on a developer's machine or a CI runner. Cases that want
 # to exercise the default-detection path override this themselves.
 MODULEJAIL_DEFAULT_WHITELIST_FILE=$CASE_TMP/default-whitelist-absent.conf
-export MODULEJAIL_MODULES_ROOT MODULEJAIL_KVER MODULEJAIL_PROC_MODULES MODULEJAIL_NO_UPDATE_CHECK MODULEJAIL_DEFAULT_WHITELIST_FILE
+export MODULEJAIL_NO_UPDATE_CHECK MODULEJAIL_DEFAULT_WHITELIST_FILE
 
 # Convenience helpers --------------------------------------------------------
 
