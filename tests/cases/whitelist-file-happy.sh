@@ -9,6 +9,8 @@ export CASE_NAME
 
 # shellcheck source=tests/lib/case-env.sh disable=SC1091
 . "$(dirname "$0")/../lib/case-env.sh"
+# shellcheck source=tests/lib/case-tree.sh disable=SC1091
+. "$REPO_ROOT/tests/lib/case-tree.sh"
 # shellcheck source=tests/lib/assert.sh disable=SC1091
 . "$REPO_ROOT/tests/lib/assert.sh"
 
