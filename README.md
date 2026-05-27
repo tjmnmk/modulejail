@@ -530,6 +530,27 @@ section above for the full framing, and
 close the root-with-intent gap (kernel lockdown mode, module signature
 enforcement, `kernel.modules_disabled=1`).
 
+## Options reference
+
+| Option | Description |
+|--------|-------------|
+| `-p`, `--profile {minimal\|conservative\|desktop}` | Built-in baseline profile (default: `conservative`) |
+| `-o`, `--output PATH` | Output path for the generated blacklist file (default: `/etc/modprobe.d/modulejail-blacklist.conf`) |
+| `--whitelist-file PATH` | Append module names from PATH to the keep-set. One module per line; `#` starts a comment. File must not be group- or world-writable. Default: `/etc/modulejail/whitelist.conf` |
+| `--no-whitelist-file` | Skip the default whitelist file even if present. Mutually exclusive with `--whitelist-file PATH` |
+| `--no-syslog-logging` | Force `/bin/true` install lines (v1.1.4 behavior). By default, blocked module loads are logged to syslog with tag `modulejail` |
+| `-f`, `--fail-on-module-load` | Blocked module loads return a non-zero exit code (`modprobe` fails loudly). Default: blocked loads silently succeed |
+| `-V`, `--version` | Show program version and exit |
+| `-h`, `--help` | Show help text and exit |
+
+Environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `MODULEJAIL_NO_UPDATE_CHECK` | Set to any non-empty value to skip the post-run update check |
+| `MODULEJAIL_LOGGER_PATH` | Path to the logger binary for syslog install-line detection (default: `/usr/bin/logger`) |
+| `MODULEJAIL_DEFAULT_WHITELIST_FILE` | Override the auto-detected whitelist path (default: `/etc/modulejail/whitelist.conf`) |
+
 ## Exit codes
 
 Exit codes follow `sysexits.h` conventions (see `man 3 sysexits`). Fleet
