@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`--no-pacman-initramfs-hook`** (mkinitcpio only): skip writing the
+  pacman libalpm trigger hook at
+  `/usr/share/libalpm/hooks/95-modulejail-strip.hook` when combined with
+  `--install-initramfs-hook`. The pacman hook approach runs the initramfs
+  build twice on every kernel install/upgrade (once by the distro's
+  kernel-package hook, once by the modulejail trigger appending
+  `-A modulejail-strip`), which is wasteful on slow hosts; this flag lets
+  the operator wire `modulejail-strip` into the `HOOKS` array in
+  `/etc/mkinitcpio.conf` (last position) instead, so the strip runs as part
+  of the single regular build. The rebuild command then becomes
+  `mkinitcpio -P` (without `-A modulejail-strip`, since the hook is wired
+  in via `HOOKS`). Without the flag the existing behavior is unchanged:
+  the pacman trigger is written and `mkinitcpio -P -- -A modulejail-strip`
+  is recommended.
+
 ## [1.5.2] - 2026-08-08
 
 ### Fixed

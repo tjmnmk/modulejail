@@ -58,6 +58,7 @@ QUIET=0
 VERBOSE=0
 OUTPUT_FORMAT=''
 INITRAMFS_HOOK_ACTION=''
+NO_PACMAN_HOOK=0
 ASSUME_YES=0
 SELF_UPDATE=0
 # GEN_INTENT: set to 1 by the parser when any generation-defining flag
@@ -295,6 +296,14 @@ usage() {
     printf '                    Remove all four possible hook file paths regardless\n'
     printf '                    of which builder is currently detected (handles\n'
     printf '                    distro migrations). Requires root.\n'
+    printf '  --no-pacman-initramfs-hook\n'
+    printf '                    (mkinitcpio only) Skip writing the pacman libalpm\n'
+    printf '                    trigger hook at /usr/share/libalpm/hooks/95-\n'
+    printf '                    modulejail-strip.hook. Only meaningful combined\n'
+    printf '                    with --install-initramfs-hook. The operator must\n'
+    # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+    printf '                    manually append `modulejail-strip` to the HOOKS\n'
+    printf '                    array in /etc/mkinitcpio.conf (last position).\n'
     printf '  -y, --yes         Skip the interactive confirmation prompt that\n'
     printf '                    --self-update would otherwise present. Required\n'
     printf '                    when --self-update is invoked from a non-\n'
@@ -482,13 +491,31 @@ EOF
         mkinitcpio)
             target_file=/etc/initcpio/install/modulejail-strip
             pacman_hook=/usr/share/libalpm/hooks/95-modulejail-strip.hook
+            # Whether the pacman libalpm trigger hook can actually be
+            # written on this host (pacman present + hooks dir). The
+            # rebuild-message branch below depends ONLY on the
+            # --no-pacman-initramfs-hook flag, NOT on this, so a dev host
+            # without /usr/share/libalpm/hooks still gets the right
+            # rebuild instruction for the flag it passed.
+            can_write_pacman_hook=0
+            if [ "$NO_PACMAN_HOOK" -eq 0 ] && command -v pacman >/dev/null 2>&1 && [ -d /usr/share/libalpm/hooks ]; then
+                can_write_pacman_hook=1
+            fi
             if [ "$dry_run" -eq 1 ]; then
                 printf 'modulejail: dry-run: would write %s (0755)\n' "$target_file"
-                if command -v pacman >/dev/null 2>&1 && [ -d /usr/share/libalpm/hooks ]; then
+                if [ "$can_write_pacman_hook" -eq 1 ]; then
                     printf 'modulejail: dry-run: would write %s (0644)\n' "$pacman_hook"
                 fi
-                # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-                printf 'modulejail: dry-run: would run `mkinitcpio -P -- -A modulejail-strip`\n'
+                if [ "$NO_PACMAN_HOOK" -eq 0 ]; then
+                    # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+                    printf 'modulejail: dry-run: would run `mkinitcpio -P -- -A modulejail-strip`\n'
+                else
+                    printf 'modulejail: dry-run: --no-pacman-initramfs-hook set; pacman trigger would NOT be written\n'
+                    # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+                    printf 'modulejail: dry-run: operator would manually append `modulejail-strip` to HOOKS in /etc/mkinitcpio.conf (last position)\n'
+                    # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+                    printf 'modulejail: dry-run: would run `mkinitcpio -P`\n'
+                fi
                 return 0
             fi
             cat > "$target_file" <<'EOF'
@@ -512,7 +539,7 @@ HELP
 EOF
             chmod 0755 "$target_file"
             printf 'modulejail: wrote mkinitcpio install hook: %s\n' "$target_file"
-            if command -v pacman >/dev/null 2>&1 && [ -d /usr/share/libalpm/hooks ]; then
+            if [ "$can_write_pacman_hook" -eq 1 ]; then
                 cat > "$pacman_hook" <<'EOF'
 # pacman trigger for the modulejail-strip mkinitcpio hook.
 # Installed by `modulejail --install-initramfs-hook`. Rebuilds every
@@ -534,8 +561,19 @@ EOF
                 chmod 0644 "$pacman_hook"
                 printf 'modulejail: wrote pacman trigger: %s\n' "$pacman_hook"
             fi
-            # shellcheck disable=SC2016  # literal backticks intended for human-readable output
-            printf 'modulejail: run `mkinitcpio -P -- -A modulejail-strip` to apply to existing initramfs images\n'
+            if [ "$NO_PACMAN_HOOK" -eq 0 ]; then
+                # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+                printf 'modulejail: run `mkinitcpio -P -- -A modulejail-strip` to apply to existing initramfs images\n'
+            else
+                # No pacman hook: the operator must wire the hook into
+                # /etc/mkinitcpio.conf themselves and rebuild manually.
+                printf 'modulejail: --no-pacman-initramfs-hook set; pacman trigger not installed\n'
+                # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+                printf 'modulejail: manually append `modulejail-strip` to the HOOKS array in /etc/mkinitcpio.conf (last position), e.g.:\n'
+                printf 'modulejail:   HOOKS=(base udev autodetect ... modulejail-strip)\n'
+                # shellcheck disable=SC2016  # literal backticks intended for human-readable output
+                printf 'modulejail: then run `mkinitcpio -P` to rebuild existing initramfs images\n'
+            fi
             ;;
     esac
 
@@ -924,6 +962,10 @@ while [ $# -gt 0 ]; do
             ;;
         --uninstall-initramfs-hook)
             INITRAMFS_HOOK_ACTION='uninstall'
+            shift
+            ;;
+        --no-pacman-initramfs-hook)
+            NO_PACMAN_HOOK=1
             shift
             ;;
         -y|--yes)
